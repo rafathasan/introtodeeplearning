@@ -2,7 +2,7 @@ import cv2
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
+import torch
 import time
 import h5py
 import sys
@@ -18,7 +18,7 @@ def plot_image_prediction(i, predictions_array, true_label, img):
 
   plt.imshow(np.squeeze(img), cmap=plt.cm.binary)
 
-  predicted_label = np.argmax(predictions_array)
+  predicted_label = torch.argmax(predictions_array)
   if predicted_label == true_label:
     color = 'blue'
   else:
@@ -36,7 +36,7 @@ def plot_value_prediction(i, predictions_array, true_label):
   plt.yticks([])
   thisplot = plt.bar(range(10), predictions_array, color="#777777")
   plt.ylim([0, 1])
-  predicted_label = np.argmax(predictions_array)
+  predicted_label = torch.argmax(predictions_array)
 
   thisplot[predicted_label].set_color('red')
   thisplot[true_label].set_color('blue')
@@ -77,18 +77,17 @@ class TrainingDatasetLoader(object):
             selected_inds = np.concatenate((selected_pos_inds, selected_neg_inds))
 
         sorted_inds = np.sort(selected_inds)
-        train_img = (self.images[sorted_inds,:,:,::-1]/255.).astype(np.float32)
-        train_label = self.labels[sorted_inds,...]
+        train_img = torch.from_numpy((self.images[sorted_inds,:,:,::-1]/255.).astype(np.float32))
+        train_label = torch.from_numpy(self.labels[sorted_inds,...])
         return (train_img, train_label, sorted_inds) if return_inds else (train_img, train_label)
 
     def get_n_most_prob_faces(self, prob, n):
         idx = np.argsort(prob)[::-1]
         most_prob_inds = self.pos_train_inds[idx[:10*n:10]]
-        return (self.images[most_prob_inds,...]/255.).astype(np.float32)
+        return torch.from_numpy((self.images[most_prob_inds,...]/255.).astype(np.float32))
 
     def get_all_train_faces(self):
-        return self.images[ self.pos_train_inds ]
-
+        return torch.from_numpy(self.images[self.labels[:,0] == 1])
 
 def get_test_faces():
     cwd = os.path.dirname(__file__)
@@ -104,4 +103,4 @@ def get_test_faces():
             image = cv2.resize(cv2.imread(file), (64,64))[:,:,::-1]/255.
             images[key].append(image)
 
-    return images["LF"], images["LM"], images["DF"], images["DM"]
+    return [np.array(images["LF"]), np.array(images["LM"]), np.array(images["DF"]), np.array(images["DM"])]

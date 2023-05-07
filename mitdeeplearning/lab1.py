@@ -3,7 +3,7 @@ import regex as re
 import subprocess
 import urllib
 import numpy as np
-import tensorflow as tf
+import torch
 
 from IPython.display import Audio
 
@@ -80,8 +80,9 @@ def test_batch_func_next_step(func, args):
     return True
 
 def test_custom_dense_layer_output(y):
-    true_y = np.array([[0.2697859,  0.45750418, 0.66536945]],dtype='float32')
-    assert tf.shape(y).numpy().tolist() == list(true_y.shape), "[FAIL] output is of incorrect shape. expected {} but got {}".format(true_y.shape, y.numpy().shape)
+    # [0.2697859, 0.45750418, 0.66536945]
+    true_y = torch.tensor([[0.5941669, 0.4365431, 0.2144695]], dtype=torch.float32)
+    assert tuple(y.shape) == tuple(true_y.shape), "[FAIL] output is of incorrect shape. expected {} but got {}".format(true_y.shape, y.shape)
     np.testing.assert_almost_equal(y.numpy(), true_y, decimal=7, err_msg="[FAIL] output is of incorrect value. expected {} but got {}".format(y.numpy(), true_y), verbose=True)
     print("[PASS] test_custom_dense_layer_output")
     return True

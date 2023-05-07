@@ -2,14 +2,14 @@ import cv2
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
+import torch
 import time
 import h5py
 import sys
 import glob
+import torch.utils.data as data
 
 IM_SHAPE = (64, 64, 3)
-
 
 def plot_image_prediction(i, predictions_array, true_label, img):
     predictions_array, true_label, img = predictions_array[i], true_label[i], img[i]
@@ -17,9 +17,10 @@ def plot_image_prediction(i, predictions_array, true_label, img):
     plt.xticks([])
     plt.yticks([])
 
+    img = torch.from_numpy(img).permute(2, 0, 1).float()
     plt.imshow(np.squeeze(img), cmap=plt.cm.binary)
 
-    predicted_label = np.argmax(predictions_array)
+    predicted_label = torch.argmax(predictions_array)
     if predicted_label == true_label:
         color = "blue"
     else:
@@ -27,7 +28,7 @@ def plot_image_prediction(i, predictions_array, true_label, img):
 
     plt.xlabel(
         "{} {:2.0f}% ({})".format(
-            predicted_label, 100 * np.max(predictions_array), true_label
+            predicted_label, 100 * torch.max(predictions_array), true_label
         ),
         color=color,
     )
@@ -40,18 +41,16 @@ def plot_value_prediction(i, predictions_array, true_label):
     plt.yticks([])
     thisplot = plt.bar(range(10), predictions_array, color="#777777")
     plt.ylim([0, 1])
-    predicted_label = np.argmax(predictions_array)
+    predicted_label = torch.argmax(predictions_array)
 
     thisplot[predicted_label].set_color("red")
     thisplot[true_label].set_color("blue")
 
 
-class DatasetLoader(tf.keras.utils.Sequence):
+class DatasetLoader(data.Dataset):
     def __init__(self, data_path, batch_size, training=True):
-
         print("Opening {}".format(data_path))
         sys.stdout.flush()
-
         self.cache = h5py.File(data_path, "r")
 
         print("Loading data into memory...")
@@ -95,7 +94,7 @@ class DatasetLoader(tf.keras.utils.Sequence):
         sorted_inds = np.sort(selected_inds)
         train_img = (self.images[sorted_inds] / 255.0).astype(np.float32)
         train_label = self.labels[sorted_inds, ...]
-        return np.array(train_img), np.array(train_label)
+        return torch.tensor(train_img), torch.tensor(train_label)
 
     def get_n_most_prob_faces(self, prob, n):
         idx = np.argsort(prob)[::-1]
@@ -116,10 +115,9 @@ def get_test_faces():
         files = glob.glob(os.path.join(cwd, "data", "faces", key, "*.png"))
         for file in sorted(files):
             image = cv2.resize(cv2.imread(file), (64, 64))[:, :, ::-1] / 255.0
-            images[key].append(image)
+            images[key].append(torch.from_numpy(image).float())
 
     return images["LF"], images["LM"], images["DF"], images["DM"]
-
 
 def plot_k(imgs, fname=None):
     fig = plt.figure()
@@ -129,14 +127,13 @@ def plot_k(imgs, fname=None):
         ax = fig.add_subplot(int(num_images / 5), 5, img + 1)
         ax.xaxis.set_visible(False)
         ax.yaxis.set_visible(False)
-        img_to_show = imgs[img]
+        img_to_show = imgs[img].permute(1, 2, 0).numpy()
         ax.imshow(img_to_show, interpolation="nearest")
     plt.subplots_adjust(wspace=0.20, hspace=0.20)
     plt.show()
     if fname:
         plt.savefig(fname)
     plt.clf()
-
 
 def plot_percentile(imgs, fname=None):
     fig = plt.figure()
@@ -145,11 +142,10 @@ def plot_percentile(imgs, fname=None):
         ax = axs[img]
         ax.xaxis.set_visible(False)
         ax.yaxis.set_visible(False)
-        img_to_show = imgs[img]
+        img_to_show = imgs[img].permute(1, 2, 0).numpy()
         ax.imshow(img_to_show, interpolation="nearest")
     if fname:
         plt.savefig(fname)
-
 
 def plot_accuracy_vs_risk(sorted_images, sorted_uncertainty, sorted_preds, plot_title):
     num_percentile_intervals = 10
@@ -164,13 +160,13 @@ def plot_accuracy_vs_risk(sorted_images, sorted_uncertainty, sorted_preds, plot_
         cur_unc = sorted_uncertainty[
             percentile * num_samples : (percentile + 1) * num_samples
         ]
-        cur_predictions = tf.nn.sigmoid(
-            sorted_preds[percentile * num_samples : (percentile + 1) * num_samples]
+        cur_predictions = torch.sigmoid(
+            torch.from_numpy(sorted_preds[percentile * num_samples : (percentile + 1) * num_samples])
         )
-        avged_imgs = tf.reduce_mean(cur_imgs, axis=0)
+        avged_imgs = torch.mean(torch.stack(cur_imgs), dim=0)
         all_imgs.append(avged_imgs)
-        all_unc.append(tf.reduce_mean(cur_unc))
-        all_acc.append((np.ones((num_samples)) == np.rint(cur_predictions)).mean())
+        all_unc.append(torch.mean(torch.from_numpy(cur_unc)))
+        all_acc.append((torch.ones((num_samples)) == torch.round(cur_predictions)).float().mean())
 
     plt.plot(np.arange(num_percentile_intervals) * 10, all_acc)
     plt.title(plot_title)
